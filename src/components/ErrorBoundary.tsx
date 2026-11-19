@@ -38,10 +38,10 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
               </div>
               <div className="min-w-0">
                 <h2 className="text-base font-bold text-slate-900">
-                  Terjadi Gangguan Sinkronisasi / Aplikasi
+                  Terjadi Gangguan Aplikasi
                 </h2>
                 <p className="text-xs text-slate-600 mt-1">
-                  Silakan muat ulang halaman untuk memulihkan koneksi dan sesi kerja Anda.
+                  Silakan muat ulang halaman untuk memulihkan sesi kerja Anda.
                 </p>
               </div>
             </div>

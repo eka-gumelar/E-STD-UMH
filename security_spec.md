@@ -1,23 +1,24 @@
 # Security Specification — STD / UMH Wire Harness Studio
 
 ## 1. Data Invariants
-1. **Strict Ownership Isolation**: Every document in `users`, `masterConfigs`, `assyRecords`, and `refreshHistory` belongs strictly to a single verified Google account (`ownerId == request.auth.uid` or `userId == request.auth.uid`). No blanket reads or cross-user list queries are permitted.
-2. **Email Verification Mandate**: All authenticated read/write operations require `request.auth != null && request.auth.token.email_verified == true`.
-3. **Document ID Hardening**: All document IDs (`userId`, `recordId`, `historyId`) must match `^[a-zA-Z0-9_\-]+$` with length `1..128`.
-4. **Immutable Audit & Ownership Fields**: `ownerId`, `uid`, `id`, and `createdAt` cannot be modified after creation. `refreshHistory` logs are strictly append-only (`update: if false`).
-5. **Server Timestamp Integrity**: `createdAt`, `updatedAt`, and `refreshedAt` must equal `request.time`. Client-forged timestamps are rejected.
-6. **Bounded Payloads & Strict Keys**: Every collection enforces `keys().hasAll(...)` and `keys().hasOnly(...)` on create, `affectedKeys().hasOnly(...)` on update, and upper bounds on all strings and lists.
+1. **Verified Identity**: Every read/write requires `request.auth != null && request.auth.token.email_verified == true`.
+2. **Strict Ownership Isolation**:
+   - `users/{userId}` and `masterConfigs/{userId}` are strictly keyed to `request.auth.uid`, with `list` disabled (`false`) and `delete` disabled (`false`).
+   - `assyRecords/{recordId}` and `refreshHistory/{historyId}` store immutable `ownerId == request.auth.uid`; both `get` and `list` enforce `resource.data.ownerId == request.auth.uid`.
+3. **Immutable Audit & Identity Fields**: `id`, `uid`, `ownerId`, and `createdAt` can never be altered on `update`. `refreshHistory` is append-only (`update: if false`).
+4. **Temporal Integrity**: `createdAt` and `updatedAt` (and `refreshedAt` on `refreshHistory`) must equal `request.time`.
+5. **Volumetric & Schema Enforcement**: All IDs match `^[a-zA-Z0-9_-]+$` (1–128 chars), every string has explicit `.size()` bounds, every array has `.size() <= MAX` and first-element type validation, and every write validates exact keys via `hasAll` + `hasOnly` (and `affectedKeys().hasOnly(...)` on update).
 
-## 2. Dirty Dozen Adversarial Payloads
-1. **Unauthenticated List Query**: `list /assyRecords` without auth -> `PERMISSION_DENIED`.
-2. **Unverified Email Write**: `create /users/{uid}` with `email_verified: false` -> `PERMISSION_DENIED`.
-3. **Cross-User Spoofing**: User A creates `/assyRecords/rec1` with `ownerId: userB` -> `PERMISSION_DENIED`.
-4. **Unscoped List Query (Query Trust Bypass)**: User A runs `collection('assyRecords')` without `where('ownerId', '==', uid)` -> `PERMISSION_DENIED`.
-5. **Shadow / Ghost Field Injection**: `create /assyRecords/rec1` including extra field `isAdmin: true` -> `PERMISSION_DENIED`.
-6. **ID Poisoning**: `create /assyRecords/../../admin` or 500-char document ID -> `PERMISSION_DENIED`.
-7. **ID Mismatch**: `create /assyRecords/rec1` with payload `id: "rec2"` -> `PERMISSION_DENIED`.
-8. **Immutable Field Tampering**: `update /assyRecords/rec1` changing `ownerId` or `createdAt` -> `PERMISSION_DENIED`.
-9. **Client Timestamp Forgery**: `create /refreshHistory/h1` with client `Date.now()` instead of `request.time` -> `PERMISSION_DENIED`.
-10. **Audit Log Tampering**: `update /refreshHistory/h1` modifying `responsibleName` or `affectedDiffs` -> `PERMISSION_DENIED`.
-11. **Oversized String / List DoS**: `create /refreshHistory/h1` with `responsibleName` length 500 or `affectedDiffs` length 600 -> `PERMISSION_DENIED`.
-12. **Cross-User Delete**: User A attempts `delete /assyRecords/{userBRecordId}` -> `PERMISSION_DENIED`.
+## 2. The "Dirty Dozen" Adversarial Payloads (All MUST Fail with PERMISSION_DENIED)
+1. **Unauthenticated read/write** to `assyRecords/any` (`request.auth == null`).
+2. **Unverified email token** (`email_verified == false`) attempting to create `users/{uid}`.
+3. **Cross-tenant PII read**: User B calling `get` on `users/{userA}`.
+4. **Blanket collection scrape**: Calling `list` on `users` or `masterConfigs`, or querying `assyRecords` without `where('ownerId', '==', uid)`.
+5. **Identity spoofing on create**: User A creating `assyRecords/rec1` with `ownerId: userB`.
+6. **Shadow field injection**: Creating `users/{uid}` with extra field `isAdmin: true`.
+7. **Owner reassignment on update**: Updating `assyRecords/{id}` to change `ownerId` or `id`.
+8. **CreatedAt tampering**: Creating or updating a document with a forged client timestamp instead of `request.time`.
+9. **ID poisoning**: Writing to `assyRecords/{150-char-or-special-char-id}`.
+10. **Array overflow / type poisoning**: Writing `masterConfigs/{uid}` with `autoCutList.size() > 2000` or `autoCutList: ["not-a-map"]`.
+11. **History mutation**: Attempting `update` on an existing `refreshHistory/{id}` audit log.
+12. **String overflow**: Writing `assyNo` longer than 120 chars or `photoURL` longer than 1000 chars.

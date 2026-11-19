@@ -121,7 +121,7 @@ export default function App() {
   const [pdfHistoryEntry, setPdfHistoryEntry] = useState<RefreshHistoryEntry | null>(null);
   const [refreshNotice, setRefreshNotice] = useState<string | null>(null);
 
-  // Latest local state snapshot ref for initial cloud seeding on login
+  // Latest local state snapshot ref for synchronous master sync & initial cloud seeding
   const localSnapshotRef = useRef({
     stdDb,
     autoCutList,
@@ -207,6 +207,9 @@ export default function App() {
             DEFAULT_STD_DATABASE,
             (cfg) => {
               if (!cfg) return;
+              localSnapshotRef.current.stdDb = cfg.stdDb;
+              localSnapshotRef.current.autoCutList = cfg.autoCutList;
+              localSnapshotRef.current.feederList = cfg.feederList;
               setStdDb(cfg.stdDb);
               saveStdDatabase(cfg.stdDb);
               setAutoCutList(cfg.autoCutList);
@@ -422,6 +425,8 @@ export default function App() {
       return next;
     });
 
+    saveLastPicName(historyEntry.responsibleName);
+
     const shouldClearPending =
       updatedMap.size > 0 || historyEntry.totalSelectedCount >= records.length;
     if (shouldClearPending) {
@@ -490,7 +495,7 @@ export default function App() {
       void upsertAssyRecordInCloud(authUser.uid, fullRecord).catch(handleCloudMutationError);
     } else if (authReady && !authUser) {
       setCloudNotice(
-        `Assy "${fullRecord.params.assyNo}" tersimpan di lokal browser. Klik "Masuk Google" untuk otomatis membuat koleksi & menyimpannya ke Firebase estdumh (${FIRESTORE_DATABASE_ID}).`
+        `Assy "${fullRecord.params.assyNo}" tersimpan di lokal browser. Klik "Masuk Google" untuk menyimpannya ke Firebase estdumh (${FIRESTORE_DATABASE_ID}).`
       );
     }
 
@@ -616,12 +621,12 @@ export default function App() {
         <div className="max-w-[1600px] w-full mx-auto px-4 sm:px-6 pt-3 print:hidden">
           <div className="px-4 py-2.5 rounded-xl bg-blue-50 border border-blue-200 text-xs text-[#1E3A8A] flex flex-wrap items-center justify-between gap-3">
             <span>
-              <strong>Mode Lokal Browser:</strong> Masuk dengan akun Google agar koleksi (
+              <strong>Mode Lokal Browser:</strong> Masuk dengan akun Google agar data (
               <span className="font-mono-num">users</span>,{' '}
               <span className="font-mono-num">masterConfigs</span>,{' '}
               <span className="font-mono-num">assyRecords</span>,{' '}
-              <span className="font-mono-num">refreshHistory</span>) otomatis dibuat &amp;
-              tersimpan ke Firebase <strong>estdumh ({FIRESTORE_DATABASE_ID})</strong>.
+              <span className="font-mono-num">refreshHistory</span>) tersimpan ke Firebase{' '}
+              <strong>estdumh ({FIRESTORE_DATABASE_ID})</strong>.
             </span>
             <div className="flex items-center gap-2 shrink-0">
               <button
@@ -855,7 +860,7 @@ export default function App() {
         </main>
       </div>
 
-      {/* 3-Step Floating Input Wizard Modal */}
+      {/* Landscape 3-Section Input Modal */}
       {wizardOpen && (
         <InputWizardModal
           initialPayload={editingPayload}

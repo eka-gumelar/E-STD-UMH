@@ -120,7 +120,7 @@ function buildAssyPayloadFields(uid: string, record: AssyRecord, scopedId: strin
   const assyNo = (record.params.assyNo || '').trim().slice(0, 120) || 'ASSY';
   const customer = (record.params.customer || '').trim().slice(0, 120);
 
-  let calculationPayload: Record<string, unknown> = cleanForFirestore(
+  const calculationPayload: Record<string, unknown> = cleanForFirestore(
     record.calculation
   ) as unknown as Record<string, unknown>;
 
@@ -180,7 +180,7 @@ export async function initializeCloudWorkspace(
   const userPath = `users/${uid}`;
   const masterPath = `masterConfigs/${uid}`;
 
-  // 1. Ensure user profile exists (auto-creates 'users' collection)
+  // 1. Ensure user profile exists
   try {
     const userRef = doc(db, 'users', uid);
     const userSnap = await getDoc(userRef);
@@ -212,7 +212,7 @@ export async function initializeCloudWorkspace(
     handleFirestoreError(error, OperationType.WRITE, userPath);
   }
 
-  // 2. Ensure master config exists (auto-creates 'masterConfigs' collection)
+  // 2. Ensure master config exists
   try {
     const masterRef = doc(db, 'masterConfigs', uid);
     const masterSnap = await getDoc(masterRef);
@@ -234,7 +234,7 @@ export async function initializeCloudWorkspace(
     handleFirestoreError(error, OperationType.WRITE, masterPath);
   }
 
-  // 3. Sync any local Assy records not yet present in Firestore (auto-creates 'assyRecords' collection)
+  // 3. Sync any local Assy records not yet present in Firestore
   if (localState.records.length > 0) {
     const existingAssyIds = new Set<string>();
     try {
@@ -262,7 +262,7 @@ export async function initializeCloudWorkspace(
     }
   }
 
-  // 4. Sync any local refresh history entries not yet present in Firestore (auto-creates 'refreshHistory')
+  // 4. Sync any local refresh history entries not yet present in Firestore
   if (localState.refreshHistory.length > 0) {
     const existingHistIds = new Set<string>();
     try {
@@ -427,7 +427,6 @@ export function saveMasterConfigToCloud(
     }
   };
 
-  // Serialize writes so back-to-back updates/resets always commit in order.
   const nextOp = masterConfigWriteQueue.then(runWrite, runWrite);
   masterConfigWriteQueue = nextOp.catch(() => undefined);
   return nextOp;
@@ -481,8 +480,6 @@ export async function upsertAssyRecordInCloud(
 
   let existsInCloud = false;
   try {
-    // Use owner-scoped list query instead of getDoc(ref) so non-existent docs
-    // never fail security rules that inspect resource.data.ownerId on get.
     const ownedSnap = await getDocs(
       query(collection(db, 'assyRecords'), where('ownerId', '==', uid))
     );
